@@ -21,7 +21,7 @@ from keras.initializers import RandomNormal, Orthogonal, Zeros, Constant
 from keras import backend as K
 from keras.engine.topology import InputSpec 
 from keras.activations import get as get_activations
-from keras.activations import softmax, tanh, sigmoid, hard_sigmoid
+from keras.activations import softmax, tanh, sigmoid, hard_sigmoid, softplus
 
 def _circulant(leng, n_shifts):
     # This is more or less the only code still left from the original author,
@@ -206,7 +206,7 @@ class NeuralTuringMachine(Recurrent):
         super(NeuralTuringMachine, self).build(input_shape)
 
 
-    def get_initial_state(self, X):
+    def ___get_initial_state(self, X):
         #if not self.stateful:
         #    self.controller.reset_states()
 
@@ -218,6 +218,22 @@ class NeuralTuringMachine(Recurrent):
         init_ww = np.zeros((self.batch_size, self.write_heads, self.n_slots))
         init_ww[:,:,0] = 1
         init_ww = K.variable(init_ww, name="init_weights_write")
+        return [init_old_ntm_output, init_M, init_wr, init_ww]
+
+    def get_initial_state(self, X):
+        #if not self.stateful:
+        #    self.controller.reset_states()
+
+        init_old_ntm_output = K.variable(np.random.random((self.batch_size, self.output_dim)), 
+                    name="init_old_ntm_output")
+        init_M = K.variable(np.random.random((self.batch_size, self.n_slots , self.m_depth)), 
+                name='main_memory')*0.042
+        wr = np.random.random((self.batch_size, self.read_heads, self.n_slots))
+        wr = wr/np.sum(wr, axis=2, keepdims=True)
+        init_wr = K.variable(wr)
+        ww = np.random.random((self.batch_size, self.read_heads, self.n_slots))
+        ww = ww/np.sum(ww, axis=2, keepdims=True)
+        init_ww = K.variable(ww)
         return [init_old_ntm_output, init_M, init_wr, init_ww]
 
 
@@ -309,11 +325,35 @@ class NeuralTuringMachine(Recurrent):
         
         #activation
         ntm_output = self.activation(ntm_output)
-        controller_instructions_read = [(tanh(k), hard_sigmoid(beta)+0.5, sigmoid(g), softmax(shift), 1 + 9*sigmoid(gamma)) for
-                (k, beta, g, shift, gamma) in controller_instructions_read]
+        # original activations, IVM
+        #controller_instructions_read = [(tanh(k), hard_sigmoid(beta)+0.5, sigmoid(g), softmax(shift), 1 + 9*sigmoid(gamma)) for
+        #        (k, beta, g, shift, gamma) in controller_instructions_read]
+        #controller_instructions_write = [
+        #        (tanh(k), hard_sigmoid(beta)+0.5, sigmoid(g), softmax(shift), 
+        #       1 + 9*sigmoid(gamma), hard_sigmoid(erase_vector), tanh(add_vector))  
+        #       for (k, beta, g, shift, gamma, erase_vector, add_vector) in controller_instructions_write]
+        
+        # IVM activations
+        controller_instructions_read = [
+                (
+                    tanh(k),                            # key
+                    softplus(beta),                     # beta, content based similarity 
+                    sigmoid(g),                         # interpolation
+                    softmax(shift),                     # shift filter
+                    1 + softplus(gamma)                 # gamma, focus sharpening
+                )
+                for (k, beta, g, shift, gamma) in controller_instructions_read]
+
         controller_instructions_write = [
-                (tanh(k), hard_sigmoid(beta)+0.5, sigmoid(g), softmax(shift), 1 + 9*sigmoid(gamma), hard_sigmoid(erase_vector), tanh(add_vector))  for 
-                (k, beta, g, shift, gamma, erase_vector, add_vector) in controller_instructions_write]
+                (
+                    tanh(k),                            # key
+                    softplus(beta),                     # beta
+                    sigmoid(g),                         # interpolation
+                    softmax(shift),                     # shift filter
+                    1 + softplus(gamma),                # gamma, focus sharpening
+                    sigmoid(erase_vector),              # erase
+                    tanh(add_vector)                    # add
+                )  for (k, beta, g, shift, gamma, erase_vector, add_vector) in controller_instructions_write]
        
         return (ntm_output, controller_instructions_read, controller_instructions_write)
         

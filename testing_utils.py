@@ -55,7 +55,7 @@ def train_model(model, epochs=10, min_size=5, max_size=20, callbacks=None, verbo
     print("done training")
 
 
-def lengthy_test(model, testrange=[5,10,20,40,80], epochs=100, verboose=True):
+def lengthy_test(model, testrange=[5,20,80], epochs=100, verboose=True):
     ts = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     log_path = LOG_PATH_BASE + ts + "_-_" + model.name 
     tensorboard = TensorBoard(log_dir=log_path,
